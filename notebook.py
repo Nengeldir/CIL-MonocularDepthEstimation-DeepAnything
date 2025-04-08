@@ -8,19 +8,20 @@ from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from pathlib import Path
 
-from src.utils import ensure_dir, train_model, evaluate_model, generate_test_predictions
+from src.utils import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device
 from src.models import SimpleUNet
 from src.transforms import target_transform
 from src.datasets import DepthDataset
 
 #data_dir = '/kaggle/input/ethz-cil-monocular-depth-estimation-2025'
-data_dir = '.\data'
+data_dir = Path('./data')
 train_dir = os.path.join(data_dir, 'train/train')
 test_dir = os.path.join(data_dir, 'test/test')
 train_list_file = os.path.join(data_dir, 'train_list.txt')
 test_list_file = os.path.join(data_dir, 'test_list.txt')
-output_dir = '.\output'
+output_dir = Path('./output')
 results_dir = os.path.join(output_dir, 'results')
 predictions_dir = os.path.join(output_dir, 'predictions')
 
@@ -28,7 +29,9 @@ BATCH_SIZE = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_EPOCHS = 1
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# DEVICE = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+DEVICE = get_best_device()
 INPUT_SIZE = (426, 560)
 NUM_WORKERS = 1
 PIN_MEMORY = True
