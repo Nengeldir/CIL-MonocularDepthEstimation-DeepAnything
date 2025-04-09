@@ -74,15 +74,14 @@ def main():
     
     # Split training dataset into train and validation
     total_size = len(train_full_dataset)
-    train_size = int(0.15 * total_size)  # 85% for training
-    val_size = int(0.15 * total_size)   # 15% for validation
-    rest_size = total_size - train_size - val_size
+    train_size = int(0.85 * total_size)  # 85% for training
+    val_size = total_size - train_size   # 15% for validation
     
     # Set a fixed random seed for reproducibility
     torch.manual_seed(0)
     
-    train_dataset, val_dataset, _ = torch.utils.data.random_split(
-        train_full_dataset, [train_size, val_size, rest_size]
+    train_dataset, val_dataset = torch.utils.data.random_split(
+        train_full_dataset, [train_size, val_size]
     )
     
     # Create data loaders with memory optimizations
