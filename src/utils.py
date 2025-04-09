@@ -11,15 +11,7 @@ def ensure_dir(directory):
         os.makedirs(directory)
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir):
-    import time
-
-    start_time = time.time()
-    for batch_idx, (inputs, targets, _) in enumerate(train_loader):
-        if batch_idx == 10:  # Check the first few batches
-            break
-    end_time = time.time()
-    print(f"Time to load 10 batches: {end_time - start_time:.2f} seconds")
-
+    
     """Train the model and save the best based on validation metrics"""
     best_val_loss = float('inf')
     best_epoch = 0
