@@ -254,3 +254,15 @@ def generate_test_predictions(model, test_loader, device, predictions_dir):
         
         # Clear cache after test predictions
         torch.cuda.empty_cache()
+
+def get_best_device():
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"Using CUDA: {torch.cuda.get_device_name(0)}")
+    elif torch.backends.mps.is_available():
+        device = torch.device('mps')
+        print("Using MPS")
+    else:
+        device = torch.device('cpu')
+        print("Using CPU")
+    return device
