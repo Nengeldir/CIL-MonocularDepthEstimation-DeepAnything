@@ -4,19 +4,20 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
+import itertools
 
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir, train_fraction=1):
     
     """Train the model and save the best based on validation metrics"""
     best_val_loss = float('inf')
     best_epoch = 0
     train_losses = []
     val_losses = []
+    
         
     for epoch in range(num_epochs):
         print(f"Epoch {epoch+1}/{num_epochs}")
@@ -24,8 +25,11 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         # Training phase
         model.train()
         train_loss = 0.0
-        
-        for inputs, targets, _ in tqdm(train_loader, desc="Training"):
+
+        total_batches = int(len(train_loader) * train_fraction)
+        train_iterator = itertools.islice(train_loader, total_batches)
+
+        for inputs, targets, _ in tqdm(train_iterator, desc="Training", total=total_batches):
             inputs, targets = inputs.to(device), targets.to(device)
             
             # Zero the gradients
