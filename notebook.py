@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -18,12 +17,14 @@ MODEL_CLASS = SimpleUNet
 BATCH_SIZE = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
-NUM_EPOCHS = 1
+NUM_EPOCHS = 5
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 INPUT_SIZE = (426, 560)
 NUM_WORKERS = 1
 PIN_MEMORY = True
 TRAIN_FRAC = 0.05
+VAL_FRAC = 0.05
+
 
 #data_dir = '/kaggle/input/ethz-cil-monocular-depth-estimation-2025'
 data_dir = '.\data'
@@ -33,6 +34,7 @@ train_list_file = os.path.join(data_dir, 'train_list.txt')
 test_list_file = os.path.join(data_dir, 'test_list.txt')
 output_dir = '.\output'
 results_dir = os.path.join(output_dir, ('results_' + MODEL_CLASS.__name__))
+logging_dir = os.path.join(output_dir, ('tensorboard_logs'))
 predictions_dir = os.path.join(output_dir, 'predictions')
 
 
@@ -117,6 +119,7 @@ def main():
     model = MODEL_CLASS()
     model = nn.DataParallel(model)
     model = model.to(DEVICE)
+    print(f"Model name: {MODEL_CLASS.__name__}, Num of trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     print(f"Using device: {DEVICE}")
 
     # Print memory usage after model initialization
@@ -130,7 +133,7 @@ def main():
     
     # Train the model
     print("Starting training...")
-    model = train_model(model, train_loader, val_loader, criterion, optimizer, NUM_EPOCHS, DEVICE, results_dir, TRAIN_FRAC)
+    model = train_model(model, train_loader, val_loader, criterion, optimizer, NUM_EPOCHS, DEVICE, results_dir, logging_dir, TRAIN_FRAC, VAL_FRAC)
             
     # Evaluate the model on validation set
     print("Evaluating model on validation set...")

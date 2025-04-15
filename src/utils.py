@@ -5,20 +5,22 @@ import torch.nn as nn
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import itertools
+from torch.utils.tensorboard import SummaryWriter
 
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir, train_fraction=1):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir, logging_dir, train_fraction=1, val_fraction=1):
+    """Train the model and save the best based on validation metrics with TensorBoard logging."""
     
-    """Train the model and save the best based on validation metrics"""
+    writer = SummaryWriter(log_dir=logging_dir)
+
     best_val_loss = float('inf')
     best_epoch = 0
     train_losses = []
     val_losses = []
-    
-        
+
     for epoch in range(num_epochs):
         print(f"Epoch {epoch+1}/{num_epochs}")
         
@@ -26,46 +28,44 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         model.train()
         train_loss = 0.0
 
-        total_batches = int(len(train_loader) * train_fraction)
-        train_iterator = itertools.islice(train_loader, total_batches)
+        total_train_batches = int(len(train_loader) * train_fraction)
+        train_iterator = itertools.islice(train_loader, total_train_batches)
 
-        for inputs, targets, _ in tqdm(train_iterator, desc="Training", total=total_batches):
+        for inputs, targets, _ in tqdm(train_iterator, desc="Training", total=total_train_batches):
             inputs, targets = inputs.to(device), targets.to(device)
             
-            # Zero the gradients
             optimizer.zero_grad()
-            
-            # Forward pass
             outputs = model(inputs)
             loss = criterion(outputs, targets)
-            
-            # Backward pass and optimize
             loss.backward()
             optimizer.step()
             
             train_loss += loss.item() * inputs.size(0)
-        
-        
+
         train_loss /= len(train_loader.dataset)
         train_losses.append(train_loss)
-        
+
         # Validation phase
         model.eval()
         val_loss = 0.0
         
         with torch.no_grad():
-            for inputs, targets, _ in tqdm(val_loader, desc="Validation"):
+            total_val_batches = int(len(val_loader) * val_fraction)
+            val_iterator = itertools.islice(val_loader, total_val_batches)
+
+            for inputs, targets, _ in tqdm(val_iterator, desc="Validation", total=total_val_batches):
                 inputs, targets = inputs.to(device), targets.to(device)
-                
-                # Forward pass
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
-                
                 val_loss += loss.item() * inputs.size(0)
-        
+
         val_loss /= len(val_loader.dataset)
         val_losses.append(val_loss)
-                
+
+        # TensorBoard logging
+        writer.add_scalar('Loss/Train', train_loss, epoch)
+        writer.add_scalar('Loss/Validation', val_loss, epoch)
+
         print(f"Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
         
         # Save the best model
@@ -80,6 +80,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     # Load the best model
     model.load_state_dict(torch.load(os.path.join(results_dir, 'best_model.pth')))
     
+    writer.close()
     return model
 
 
