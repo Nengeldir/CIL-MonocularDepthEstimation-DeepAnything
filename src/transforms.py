@@ -1,5 +1,5 @@
 import torch
-from torchvision import transforms
+from torchvision.transforms import v2
 
 def target_transform(depth, input_size):
     # Resize the depth map to match input size
@@ -16,16 +16,17 @@ def target_transform(depth, input_size):
 
 # Define transforms
 def train_transform(input_size):
-    return transforms.Compose([
-        transforms.Resize(input_size),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Data augmentation
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    return v2.Compose([
+        v2.Resize(input_size),
+        v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Data augmentation
+        v2.ToTensor(),
+        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
 def test_transform(input_size):
-    return transforms.Compose([
-        transforms.Resize(input_size),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    return v2.Compose([
+        v2.Resize(input_size),
+        v2.ToTensor(),
+        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
+
