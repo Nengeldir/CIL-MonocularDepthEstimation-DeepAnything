@@ -15,10 +15,11 @@ def target_transform(depth, input_size):
     return depth
 
 # Define transforms
-def train_transform(input_size):
+def train_transform(input_size, permute_channel=False):
     return v2.Compose([
         v2.Resize(input_size),
         v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Data augmentation
+        v2.RandomChannelPermutation(),
         v2.ToTensor(),
         v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])

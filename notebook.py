@@ -18,6 +18,7 @@ BATCH_SIZE = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_EPOCHS = 5
+PERMUTE_TRAIN_CHANNELS = True
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 INPUT_SIZE = (426, 560)
 NUM_WORKERS = 1
@@ -33,7 +34,7 @@ test_dir = os.path.join(data_dir, 'test/test')
 train_list_file = os.path.join(data_dir, 'train_list.txt')
 test_list_file = os.path.join(data_dir, 'test_list.txt')
 output_dir = '.\output'
-results_dir = os.path.join(output_dir, ('results_' + MODEL_CLASS.__name__))
+results_dir = os.path.join(output_dir, ('results_' + MODEL_CLASS.__name__ + ('_channel_permuted' if PERMUTE_TRAIN_CHANNELS else '')))
 logging_dir = os.path.join(output_dir, ('tensorboard_logs'))
 predictions_dir = os.path.join(output_dir, 'predictions')
 
@@ -46,7 +47,7 @@ def main():
     ensure_dir(predictions_dir)
     
     target_transform_fn = lambda depth: target_transform(depth, INPUT_SIZE)
-    train_transform_fn = train_transform(INPUT_SIZE)
+    train_transform_fn = train_transform(INPUT_SIZE, PERMUTE_TRAIN_CHANNELS)
     test_transform_fn = test_transform(INPUT_SIZE)
 
     # Create training dataset with ground truth
