@@ -25,6 +25,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     best_epoch = 0
     train_losses = []
     val_losses = []
+
+    with open(os.path.join(results_dir, 'train_metrics.txt'), 'w') as f:
+        pass
         
     for epoch in range(num_epochs):
         print(f"Epoch {epoch+1}/{num_epochs}")
@@ -32,6 +35,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         # Training phase
         model.train()
         train_loss = 0.0
+
+        batch = 0
         
         for inputs, targets, _ in tqdm(train_loader, desc="Training"):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -48,6 +53,11 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             optimizer.step()
             
             train_loss += loss.item() * inputs.size(0)
+
+            with open(os.path.join(results_dir, 'train_metrics.txt'), 'a') as f:
+                f.write(f"({epoch+1}, {batch+1}: {loss.item():.4f}")
+
+            batch += 1
         
         
         train_loss /= len(train_loader.dataset)
