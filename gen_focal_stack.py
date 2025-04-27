@@ -64,7 +64,7 @@ for image_id in train_image_ids:
     depth_image = depth_image.to(device)
 
     # Convert depth map to meters
-    # depth_img / 1000.0 # Uncomment if depth is in mm (I guess they are in m already)
+    depth_image = depth_image / 1000.0 # Uncomment if depth is in mm (I guess they are in m already)
 
     depth_image = depth_image.unsqueeze(0)
 
@@ -77,6 +77,7 @@ for image_id in train_image_ids:
 
     focus_distances = torch.linspace(min_depth, max_depth, steps = STACKSIZE).to(device)
 
+    
     focal_stack = camera_lib.render_defocus(
         rgb_image,
         depth_image,
@@ -88,10 +89,12 @@ for image_id in train_image_ids:
     # Save focal stack
     for i in range(STACKSIZE):
         output_path = os.path.join(dataPath_train, image_id.replace('_rgb.png', f'_focal_stack_{i}.png'))
-        if os.path.exists(output_path):
-            print(f"Focal stack {i} for {image_id} already exists. Skipping.")
-            continue
-        else:
-            # Convert the focal stack image to uint8
-            focal_stack_image = (focal_stack[i].permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
-            imageio.imwrite(output_path, focal_stack_image)
+        # if os.path.exists(output_path):
+        #     print(f"Focal stack {i} for {image_id} already exists. Skipping.")
+        #     continue
+        # else:
+        # Convert the focal stack image to uint8
+        focal_stack_image = (focal_stack[i].permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+        imageio.imwrite(output_path, focal_stack_image)
+
+    print(f"Focal stack for {image_id} saved.")
