@@ -1,5 +1,9 @@
 data/
 output/
+weights/
+results/
+checkpoints/
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
