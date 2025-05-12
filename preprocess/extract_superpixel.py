@@ -16,6 +16,8 @@ from functools import partial
 
 import argparse
 
+import re
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_path', type=str,
@@ -98,7 +100,11 @@ for scene in train_scenes:
 
 for filename in test_files:
 
-    index = int(filename.split('/')[-1].split('_')[0])
+    match = re.search(r'(\d+)', filename)
+    if match:
+        index = int(match.group(1))
+    else:
+        raise ValueError(f"Cannot extract index from filename: {filename}")
     segment = extract_superpixel(filename)
     cv2.imwrite(os.path.join(test_dir, "{:05d}_seg.png".format(index)), segment.astype(np.uint8))
 
