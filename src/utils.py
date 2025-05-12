@@ -4,21 +4,18 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import math
 
+from torch.utils.tensorboard import SummaryWriter
+from src.loss import scaleinvariant_RMSE, ScaleInvariantGradientLoss, ScaleInvariantPhotometricLoss
 
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir):
-    import time
-
-    start_time = time.time()
-    for batch_idx, (inputs, targets, _) in enumerate(train_loader):
-        if batch_idx == 10:  # Check the first few batches
-            break
-    end_time = time.time()
-    print(f"Time to load 10 batches: {end_time - start_time:.2f} seconds")
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir, train_pictures_loader, start_epoch, val_criterion):
+    # TensorBoard writer
+    writer = SummaryWriter(log_dir=os.path.join(results_dir, "tensorboard_logs"))
 
     """Train the model and save the best based on validation metrics"""
     best_val_loss = float('inf')
@@ -28,8 +25,19 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
     with open(os.path.join(results_dir, 'train_metrics.txt'), 'w') as f:
         pass
-        
-    for epoch in range(num_epochs):
+
+    global_step = 0  # Counter for TensorBoard
+
+    # Some fixed losses we track for each model, regardless of the train loss
+    SIMLoss = scaleinvariant_RMSE()
+    GradLoss = ScaleInvariantGradientLoss()
+    PhotoLoss = ScaleInvariantPhotometricLoss()
+
+    for epoch in range(start_epoch, num_epochs + start_epoch):
+        epoch_dir = os.path.join(results_dir, f'epoch_{epoch+1}')
+
+        ensure_dir(epoch_dir)
+
         print(f"Epoch {epoch+1}/{num_epochs}")
         
         # Training phase
@@ -37,8 +45,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         train_loss = 0.0
 
         batch = 0
-        
+
         for inputs, targets, _ in tqdm(train_loader, desc="Training"):
+            if batch == 0:
+                global_step = epoch * math.ceil(len(train_loader.dataset) / inputs.size(0))
             inputs, targets = inputs.to(device), targets.to(device)
             
             # Zero the gradients
@@ -47,41 +57,94 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             # Forward pass
             outputs = model(inputs)
             loss = criterion(outputs, targets)
-            
+
+            # Compute the losses for tensorboard
+            si = SIMLoss(outputs, targets)
+            gl = GradLoss(outputs, targets)
+            pl = PhotoLoss(outputs, targets)
+
             # Backward pass and optimize
             loss.backward()
             optimizer.step()
             
             train_loss += loss.item() * inputs.size(0)
 
-            with open(os.path.join(results_dir, 'train_metrics.txt'), 'a') as f:
+            with open(os.path.join(epoch_dir, 'train_metrics.txt'), 'a') as f:
                 f.write(f"({epoch+1}, {batch+1}: {loss.item():.4f}")
 
+            # Log to TensorBoard
+            writer.add_scalar("Loss/Train", loss.item(), global_step)
+            writer.add_scalar("Loss/ScaleInvariantLoss", si.item(), global_step)
+            writer.add_scalar("Loss/GradientLoss", gl.item(), global_step)
+            writer.add_scalar("Loss/PhotometricLoss", pl.item(), global_step)
+
+            global_step += 1
             batch += 1
-        
-        
+
         train_loss /= len(train_loader.dataset)
         train_losses.append(train_loss)
-        
+
         # Validation phase
         model.eval()
         val_loss = 0.0
-        
+
+        total_samples = 0
         with torch.no_grad():
-            for inputs, targets, _ in tqdm(val_loader, desc="Validation"):
+            for inputs, targets, filenames in tqdm(val_loader, desc="Validation"):
+
                 inputs, targets = inputs.to(device), targets.to(device)
-                
+                batch_size = inputs.size(0)
+                total_samples += batch_size
+
                 # Forward pass
                 outputs = model(inputs)
-                loss = criterion(outputs, targets)
+                loss = val_criterion(outputs, targets)
                 
                 val_loss += loss.item() * inputs.size(0)
-        
+
+                # Save some sample predictions
+                if total_samples <= 5 * batch_size:
+                    for i in range(min(batch_size, 5)):
+                        idx = total_samples - batch_size + i
+
+                        # Convert tensors to numpy arrays
+                        input_np = inputs[i].cpu().permute(1, 2, 0).numpy()
+                        target_np = targets[i].cpu().squeeze().numpy()
+                        output_np = outputs[i].cpu().squeeze().numpy()
+
+                        # Normalize for visualization
+                        input_np = (input_np - input_np.min()) / (input_np.max() - input_np.min() + 1e-6)
+
+                        # Create visualization
+                        plt.figure(figsize=(15, 5))
+
+                        plt.subplot(1, 3, 1)
+                        plt.imshow(input_np)
+                        plt.title("RGB Input")
+                        plt.axis('off')
+
+                        plt.subplot(1, 3, 2)
+                        plt.imshow(target_np, cmap='plasma')
+                        plt.title("Ground Truth Depth")
+                        plt.axis('off')
+
+                        plt.subplot(1, 3, 3)
+                        plt.imshow(output_np, cmap='plasma')
+                        plt.title("Predicted Depth")
+                        plt.axis('off')
+
+                        plt.tight_layout()
+                        plt.savefig(os.path.join(epoch_dir, f"sample_{idx}.png"))
+                        plt.close()
+
         val_loss /= len(val_loader.dataset)
         val_losses.append(val_loss)
                 
         print(f"Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
-        
+
+        # Log validation loss to TensorBoard
+        writer.add_scalar("Loss/Validation", val_loss, epoch)
+
         # Save the best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -93,7 +156,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     
     # Load the best model
     model.load_state_dict(torch.load(os.path.join(results_dir, 'best_model.pth')))
-    
+
+    writer.close()  # Close the TensorBoard writer
     return model
 
 
@@ -284,3 +348,10 @@ def get_best_device():
         device = torch.device('cpu')
         print("Using CPU")
     return device
+
+def pad_to_multiple_of_14(batch):
+    B, C, H, W = batch.shape
+    pad_h = (14 - H % 14) % 14
+    pad_w = (14 - W % 14) % 14
+    padding = (0, pad_w, 0, pad_h)  # (left, right, top, bottom)
+    return nn.functional.pad(batch, padding)

@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from src.utils import pad_to_multiple_of_14
+from Depth_Anything_V2.depth_anything_v2.dpt import DepthAnythingV2
 
 class UNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -138,5 +139,31 @@ class AdvancedUNEt(nn.Module):
         x = torch.sigmoid(x)*10
         return x
 
-        
-    
+class DepthAnythingSmallPretrained(nn.Module):
+    def __init__(self):
+        super(DepthAnythingSmallPretrained, self).__init__()
+        # Load the Depth-Anything-Small Model with Pre-trained weights
+        self.model = DepthAnythingV2(encoder='vits', features=64, out_channels=[48, 96, 192, 384])
+        self.model.load_state_dict(torch.load('Depth_Anything_V2/depth_anything_v2_vits.pth'))
+        return
+
+    def forward(self, x):
+        # Pad the input to be a multiple of 14 for Depth-Anything to work
+        x = pad_to_multiple_of_14(x)
+
+        # Inverse the output from depth-anything, since we want higher values for further away objects
+        x = -1 * self.model(x).unsqueeze(1)
+
+        # Resize the image again
+        x = nn.functional.interpolate(
+            x,
+            size=(426, 560),  # Match height and width of targets
+            mode='bilinear',
+            align_corners=True
+        )
+        # Normalize depth-anything's output to be between [0, 10] since we only need relative positions anyways
+        x_min = x.amin(dim=[2, 3], keepdim=True)
+        x_max = x.amax(dim=[2, 3], keepdim=True)
+        x = (x - x_min) / (x_max - x_min + 1e-8)  # Normalize to [0, 1]
+        x = x * 10  # Multiply by 10
+        return x

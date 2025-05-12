@@ -6,10 +6,10 @@ import zlib
 from tqdm import tqdm
 
 # Path definitions
-data_root = '<Path to data>'
-predictions_dir = os.path.join(data_root, 'predictions')
-test_list_file = os.path.join(data_root, 'test_list.txt')
-output_csv = os.path.join(data_root, 'predictions.csv')
+data_root = '../'
+predictions_dir = os.path.join(data_root, 'output/predictions_depthAnythingSmall_trained')
+test_list_file = os.path.join(data_root, 'data/test_list.txt')
+output_csv = os.path.join(data_root, 'predictions_depthAnythingSmall_trained_epoch3.csv')
 
 def compress_depth_values(depth_values):
     # Convert depth values to bytes
