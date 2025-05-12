@@ -117,6 +117,14 @@ class AdvancedUNEt(nn.Module):
         factor = 2
 
         self.down4 = (Down(512, 1024 // factor))
+
+        """
+        self.transformer_proj = nn.Conv2d(512, 512, 1) # Linear Projection
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=512, nhead=8), num_layers=5
+        )
+        """
+
         self.up1 = (Up(1024, 512 // factor))
         self.up2 = (Up(512, 256 // factor))
         self.up3 = (Up(256, 128 // factor))
@@ -130,6 +138,15 @@ class AdvancedUNEt(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
+
+        """
+        x5_proj = self.transformer_proj(x5)  # [B, 512, H, W]
+        b, c, h, w = x5_proj.shape
+        x5_flat = x5_proj.flatten(2).permute(0, 2, 1)  # [B, HW, C]
+        x5_trans = self.transformer_encoder(x5_flat)    # [B, HW, C]
+        x5_out = x5_trans.permute(0, 2, 1).reshape(b, c, h, w)
+        """
+
         x = self.up1(x5, x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)
