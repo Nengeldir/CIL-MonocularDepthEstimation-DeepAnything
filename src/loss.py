@@ -19,6 +19,6 @@ class scaleinvariant_RMSE(nn.Module):
 
         alpha = delta.mean(dim=1, keepdim=True)
 
-        loss = ((delta + alpha) ** 2).mean(dim=1).sqrt()
+        loss = ((-delta + alpha) ** 2).mean(dim=1).sqrt()
 
         return loss.mean()
