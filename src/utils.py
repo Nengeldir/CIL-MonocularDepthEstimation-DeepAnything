@@ -97,9 +97,16 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     return model
 
 
-def evaluate_model(model, val_loader, device, results_dir):
+def evaluate_model(model, val_loader, device, results_dir, monte_carlo_samples=20):
     """Evaluate the model and compute metrics on validation set"""
     model.eval()
+
+    def enable_dropout(model):
+        for m in model.modules():
+            if m.__class__.__name__.startswith('Dropout'):
+                m.train()  # Set dropout layers to training mode
+    
+    enable_dropout(model)
     
     mae = 0.0
     rmse = 0.0
@@ -111,6 +118,8 @@ def evaluate_model(model, val_loader, device, results_dir):
     
     total_samples = 0
     target_shape = None
+
+    uncertainty_error_correlation = []
     
     with torch.no_grad():
         for inputs, targets, filenames in tqdm(val_loader, desc="Evaluating"):
@@ -122,16 +131,28 @@ def evaluate_model(model, val_loader, device, results_dir):
                 target_shape = targets.shape
             
 
-            # Forward pass
-            outputs = model(inputs)
+            all_outputs = []
+            for _ in range(monte_carlo_samples):
+                outputs = model(inputs)
+                
+                # Resize outputs if needed
+                outputs = nn.functional.interpolate(
+                    outputs,
+                    size=targets.shape[-2:],
+                    mode='bilinear',
+                    align_corners=True
+                )
+                all_outputs.append(outputs)
             
-            # Resize outputs to match target dimensions
-            outputs = nn.functional.interpolate(
-                outputs,
-                size=targets.shape[-2:],  # Match height and width of targets
-                mode='bilinear',
-                align_corners=True
-            )
+            # Stack all predictions
+            stacked_outputs = torch.stack(all_outputs, dim=0)  # [MC_samples, batch_size, 1, H, W]
+            
+            # Calculate mean prediction and uncertainty
+            mean_outputs = torch.mean(stacked_outputs, dim=0)  # [batch_size, 1, H, W]
+            uncertainty = torch.std(stacked_outputs, dim=0)    # [batch_size, 1, H, W]
+            
+            # Use mean prediction for metric calculation
+            outputs = mean_outputs
             
             # Calculate metrics
             abs_diff = torch.abs(outputs - targets)
@@ -172,6 +193,21 @@ def evaluate_model(model, val_loader, device, results_dir):
             delta2 += torch.sum(max_ratio < 1.25**2).item()
             delta3 += torch.sum(max_ratio < 1.25**3).item()
             
+            # Calculate correlation between error and uncertainty
+            for i in range(batch_size):
+                error_map = abs_diff[i].cpu().squeeze().numpy()
+                uncertainty_map = uncertainty[i].cpu().squeeze().numpy()
+                
+                # Flatten the maps
+                error_flat = error_map.flatten()
+                uncertainty_flat = uncertainty_map.flatten()
+                
+                # Calculate correlation
+                if len(error_flat) > 1:  # Need at least 2 points for correlation
+                    corr = np.corrcoef(error_flat, uncertainty_flat)[0, 1]
+                    if not np.isnan(corr):
+                        uncertainty_error_correlation.append(corr)
+            
             # Save some sample predictions
             if total_samples <= 5 * batch_size:
                 for i in range(min(batch_size, 5)):
@@ -208,7 +244,7 @@ def evaluate_model(model, val_loader, device, results_dir):
                     plt.close()
             
             # Free up memory
-            del inputs, targets, outputs, abs_diff, max_ratio
+            del inputs, targets, outputs, abs_diff, max_ratio, all_outputs, stacked_outputs, uncertainty
             
         # Clear CUDA cache
         torch.cuda.empty_cache()
@@ -222,6 +258,8 @@ def evaluate_model(model, val_loader, device, results_dir):
     delta1 /= total_samples * total_pixels
     delta2 /= total_samples * total_pixels
     delta3 /= total_samples * total_pixels
+
+    avg_uncertainty_correlation = np.mean(uncertainty_error_correlation) if uncertainty_error_correlation else 0.0
     
     metrics = {
         'MAE': mae,
@@ -230,14 +268,22 @@ def evaluate_model(model, val_loader, device, results_dir):
         'REL': rel,
         'Delta1': delta1,
         'Delta2': delta2,
-        'Delta3': delta3
+        'Delta3': delta3,
+        'Uncertainty_Error_Correlation': avg_uncertainty_correlation 
     }
     
     return metrics
 
-def generate_test_predictions(model, test_loader, device, predictions_dir):
+def generate_test_predictions(model, test_loader, device, predictions_dir, monte_carlo_samples=20):
     """Generate predictions for the test set without ground truth"""
     model.eval()
+
+    def enable_dropout(model):
+        for m in model.modules():
+            if m.__class__.__name__.startswith('Dropout'):
+                m.train()
+    
+    enable_dropout(model)
     
     # Ensure predictions directory exists
     ensure_dir(predictions_dir)
@@ -247,16 +293,23 @@ def generate_test_predictions(model, test_loader, device, predictions_dir):
             inputs = inputs.to(device)
             batch_size = inputs.size(0)
             
-            # Forward pass
-            outputs = model(inputs)
+            all_outputs = []
+            for _ in range(monte_carlo_samples):
+                outputs = model(inputs)
+                
+                # Resize outputs to match original dimensions
+                outputs = nn.functional.interpolate(
+                    outputs,
+                    size=(426, 560),  # Original input dimensions
+                    mode='bilinear',
+                    align_corners=True
+                )
+                all_outputs.append(outputs)
             
-            # Resize outputs to match original input dimensions (426x560)
-            outputs = nn.functional.interpolate(
-                outputs,
-                size=(426, 560),  # Original input dimensions
-                mode='bilinear',
-                align_corners=True
-            )
+            # Stack and compute statistics
+            stacked_outputs = torch.stack(all_outputs, dim=0)  # [MC_samples, B, 1, H, W]
+            outputs = torch.mean(stacked_outputs, dim=0)
+            uncertainty = torch.std(stacked_outputs, dim=0)
             
             # Save all test predictions
             for i in range(batch_size):
@@ -266,9 +319,13 @@ def generate_test_predictions(model, test_loader, device, predictions_dir):
                 # Save depth map prediction as numpy array
                 depth_pred = outputs[i].cpu().squeeze().numpy()
                 np.save(os.path.join(predictions_dir, f"{filename}"), depth_pred)
+
+                # Save uncertainty map
+                uncertainty_map = uncertainty[i].cpu().squeeze().numpy()
+                np.save(os.path.join(predictions_dir, f"{filename}_uncertainty.npy"), uncertainty_map)
             
             # Clean up memory
-            del inputs, outputs
+            del inputs, all_outputs, stacked_outputs, outputs, uncertainty
         
         # Clear cache after test predictions
         torch.cuda.empty_cache()

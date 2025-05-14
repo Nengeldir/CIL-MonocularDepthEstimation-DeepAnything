@@ -56,34 +56,39 @@ class SimpleUNet(nn.Module):
         return x
     
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dropout_rate=0.2):
         super(ConvBlock, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.ReLU(inplace=True)
+        self.dropout1 = nn.Dropout2d(p=dropout_rate)
+
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.relu2 = nn.ReLU(inplace=True)
+        self.dropout2 = nn.Dropout2d(p=dropout_rate)
     
     def forward(self, x):
         x = self.relu1(self.bn1(self.conv1(x)))
+        x = self.dropout1(x)
         x = self.relu2(self.bn2(self.conv2(x)))
+        x = self.dropout2(x)
         return x
     
 class Down(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dropout_rate=0.2):
         super(Down, self).__init__()
         self.MP = nn.MaxPool2d(2)
-        self.conv = ConvBlock(in_channels, out_channels)
+        self.conv = ConvBlock(in_channels, out_channels, dropout_rate)
 
     def forward(self, x):
         return self.conv(self.MP(x))
     
 class Up(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dropout_rate=0.2):
         super(Up, self).__init__()
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.conv = ConvBlock(in_channels, out_channels)
+        self.conv = ConvBlock(in_channels, out_channels, dropout_rate)
     
     def forward(self, x1, x2):
         x1 = self.up(x1)
@@ -106,17 +111,17 @@ class OutConv(nn.Module):
         return self.conv(x)
 
 class AdvancedUNEt(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout_rate=0.2):
         super(AdvancedUNEt, self).__init__()
 
-        self.inc = (ConvBlock(3, 64))
-        self.down1 = (Down(64, 128))
-        self.down2 = (Down(128, 256))
-        self.down3 = (Down(256, 512))
+        self.inc = (ConvBlock(3, 64, dropout_rate))
+        self.down1 = (Down(64, 128, dropout_rate))
+        self.down2 = (Down(128, 256, dropout_rate))
+        self.down3 = (Down(256, 512, dropout_rate))
 
         factor = 2
 
-        self.down4 = (Down(512, 1024 // factor))
+        self.down4 = (Down(512, 1024 // factor, dropout_rate))
 
         """
         self.transformer_proj = nn.Conv2d(512, 512, 1) # Linear Projection
@@ -125,9 +130,9 @@ class AdvancedUNEt(nn.Module):
         )
         """
 
-        self.up1 = (Up(1024, 512 // factor))
-        self.up2 = (Up(512, 256 // factor))
-        self.up3 = (Up(256, 128 // factor))
+        self.up1 = (Up(1024, 512 // factor, dropout_rate))
+        self.up2 = (Up(512, 256 // factor, dropout_rate))
+        self.up3 = (Up(256, 128 // factor, dropout_rate))
         self.up4 = (Up(128, 64))
 
         self.final = nn.Conv2d(64, 1, kernel_size=1)

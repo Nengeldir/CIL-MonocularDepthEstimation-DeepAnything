@@ -11,9 +11,11 @@ from tqdm import tqdm
 from pathlib import Path
 
 from src.utils import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device
-from src.models import SimpleUNet
+from src.models import SimpleUNet, AdvancedUNEt
 from src.transforms import target_transform
 from src.datasets import DepthDataset
+
+from src.loss import scaleinvariant_RMSE
 
 #data_dir = '/kaggle/input/ethz-cil-monocular-depth-estimation-2025'
 data_dir = Path('./data')
@@ -28,13 +30,18 @@ predictions_dir = os.path.join(output_dir, 'predictions')
 BATCH_SIZE = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
-NUM_EPOCHS = 1
+NUM_EPOCHS = 10
 # DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # DEVICE = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
 DEVICE = get_best_device()
 INPUT_SIZE = (426, 560)
-NUM_WORKERS = 1
+NUM_WORKERS = 4
 PIN_MEMORY = True
+
+def transform_fn(depth):
+    return target_transform(depth, INPUT_SIZE)
+
+START_TRAINING = True
 
 
 def main():
@@ -56,7 +63,7 @@ def main():
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
-    transform_fn = lambda depth: target_transform(depth, INPUT_SIZE)
+    # transform_fn = lambda depth: target_transform(depth, INPUT_SIZE)
 
     # Create training dataset with ground truth
     train_full_dataset = DepthDataset(
@@ -77,7 +84,7 @@ def main():
     
     # Split training dataset into train and validation
     total_size = len(train_full_dataset)
-    train_size = int(0.15 * total_size)  # 85% for training
+    train_size = int(0.85 * total_size)  # 85% for training
     val_size = int(0.15 * total_size)   # 15% for validation
     rest_size = total_size - train_size - val_size
     
@@ -93,7 +100,7 @@ def main():
         train_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=True, 
-        num_workers=0, 
+        num_workers=NUM_WORKERS, 
         pin_memory=PIN_MEMORY,
         drop_last=True,
         persistent_workers=False
@@ -103,7 +110,7 @@ def main():
         val_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=False, 
-        num_workers=0, 
+        num_workers=NUM_WORKERS, 
         pin_memory=PIN_MEMORY
     )
     
@@ -111,7 +118,7 @@ def main():
         test_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=False, 
-        num_workers=0, 
+        num_workers=NUM_WORKERS, 
         pin_memory=PIN_MEMORY
     )
     
@@ -126,46 +133,95 @@ def main():
         print(f"Total GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
         print(f"Initially allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
     
-    model = SimpleUNet()
-    model = nn.DataParallel(model)
-    model = model.to(DEVICE)
-    print(f"Using device: {DEVICE}")
+    if START_TRAINING:
+        model = AdvancedUNEt(dropout_rate=0.0)
+        model = nn.DataParallel(model)
+        model = model.to(DEVICE)
+        print(f"Using device: {DEVICE}")
 
-    # Print memory usage after model initialization
-    if torch.cuda.is_available():
-        print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
-    
-    # Define loss function and optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    
-    
-    # Train the model
-    print("Starting training...")
-    model = train_model(model, train_loader, val_loader, criterion, optimizer, NUM_EPOCHS, DEVICE, results_dir)
-            
-    # Evaluate the model on validation set
-    print("Evaluating model on validation set...")
-    metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
-    
-    # Print metrics
-    print("\nValidation Metrics:")
-    for name, value in metrics.items():
-        print(f"{name}: {value:.4f}")
-    
-    # Save metrics to file
-    with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+        # Print memory usage after model initialization
+        if torch.cuda.is_available():
+            print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+        
+        # Define loss function and optimizer
+        criterion = scaleinvariant_RMSE()
+        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+        
+        
+        # Train the model
+        print("Starting training...")
+        model = train_model(model, train_loader, val_loader, criterion, optimizer, NUM_EPOCHS, DEVICE, results_dir)
+                
+        # Evaluate the model on validation set
+        print("Evaluating model on validation set...")
+        metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
+        
+        # Print metrics
+        print("\nValidation Metrics:")
         for name, value in metrics.items():
-            f.write(f"{name}: {value:.4f}\n")
+            print(f"{name}: {value:.4f}")
+        
+        # Save metrics to file
+        with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+            for name, value in metrics.items():
+                f.write(f"{name}: {value:.4f}\n")
+        
+        # Generate predictions for the test set
+        print("Generating predictions for test set...")
+        generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
+        
+        print(f"Results saved to {results_dir}")
+        print(f"All test depth map predictions saved to {predictions_dir}")
     
-    # Generate predictions for the test set
-    print("Generating predictions for test set...")
-    generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
-    
-    print(f"Results saved to {results_dir}")
-    print(f"All test depth map predictions saved to {predictions_dir}")
+    else:
+        # === Continue training from checkpoint ===
+        model = AdvancedUNEt()
+        model = nn.DataParallel(model)
+        model = model.to(DEVICE)
+        print(f"Using device: {DEVICE}")
 
-main()
+        if torch.cuda.is_available():
+            print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+
+        criterion = scaleinvariant_RMSE()
+        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+
+        # Load checkpoint
+        model.load_state_dict(torch.load('./output_attention_1/results/best_model.pth', map_location=DEVICE))
+        print("Loaded model weights from best_model.pth")
+
+        print("Continuing training...")
+        model = train_model(
+            model,
+            train_loader,
+            val_loader,
+            criterion,
+            optimizer,
+            NUM_EPOCHS,
+            DEVICE,
+            results_dir
+        )
+
+        print("Evaluating model on validation set...")
+        metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
+
+        print("\nValidation Metrics:")
+        for name, value in metrics.items():
+            print(f"{name}: {value:.4f}")
+
+        with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+            for name, value in metrics.items():
+                f.write(f"{name}: {value:.4f}\n")
+
+        print("Generating predictions for test set...")
+        generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
+
+        print(f"Results saved to {results_dir}")
+        print(f"All test depth map predictions saved to {predictions_dir}")
+
+
+if __name__ == '__main__':
+    main()
 
 # Open a sample prediction from validation set
-Image.open('/kaggle/working/results/sample_0.png')
+# Image.open('/kaggle/working/results/sample_0.png')
