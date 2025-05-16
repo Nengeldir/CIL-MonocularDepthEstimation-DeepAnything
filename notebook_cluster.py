@@ -10,17 +10,19 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from pathlib import Path
 
-from src.utils import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device
+from src.utils import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device, train_uncertainty_model
 from src.models import SimpleUNet, AdvancedUNEt
 from src.transforms import target_transform
 from src.datasets import DepthDataset
 
-from src.loss import scaleinvariant_RMSE
+from src.loss import scaleinvariant_RMSE, TotalLoss
+
 
 data_dir = '/cluster/courses/cil/monocular_depth/data'
 train_dir = os.path.join(data_dir, 'train')
 test_dir = os.path.join(data_dir, 'test')
-train_list_file = os.path.join(data_dir, 'train_list.txt')
+# train_list_file = os.path.join(data_dir, 'train_list.txt')
+train_list_file = ('./train_list_cluster.txt')
 test_list_file = os.path.join(data_dir, 'test_list.txt')
 output_dir = './outputs'
 results_dir = os.path.join(output_dir, 'results')
@@ -30,17 +32,45 @@ BATCH_SIZE = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_EPOCHS = 10
+NUM_EPOCHS_DROPOUT = 5
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # DEVICE = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
 # DEVICE = get_best_device()
 INPUT_SIZE = (426, 560)
-NUM_WORKERS = 2
+NUM_WORKERS = 4
 PIN_MEMORY = True
+
+
+
+"""
+data_dir = Path('./data')
+train_dir = os.path.join(data_dir, 'train/train')
+test_dir = os.path.join(data_dir, 'test/test')
+train_list_file = os.path.join(data_dir, 'train_list.txt')
+test_list_file = os.path.join(data_dir, 'test_list.txt')
+output_dir = Path('./output')
+results_dir = os.path.join(output_dir, 'results')
+predictions_dir = os.path.join(output_dir, 'predictions')
+
+BATCH_SIZE = 4
+LEARNING_RATE = 1e-4
+WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 10
+NUM_EPOCHS_DROPOUT=1
+# DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# DEVICE = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+DEVICE = get_best_device()
+INPUT_SIZE = (426, 560)
+NUM_WORKERS = 4
+PIN_MEMORY = True
+"""
+
 
 def transform_fn(depth):
     return target_transform(depth, INPUT_SIZE)
 
 START_TRAINING = True
+MODE = "Adding Dropout"
 
 
 def main():
@@ -132,91 +162,142 @@ def main():
         print(f"Total GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
         print(f"Initially allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
     
-    if START_TRAINING:
-        model = AdvancedUNEt(dropout_rate=0.0)
-        model = nn.DataParallel(model)
-        model = model.to(DEVICE)
-        print(f"Using device: {DEVICE}")
+    match MODE:
+        case "Start":
+            model = AdvancedUNEt(dropout_rate=0.0)
+            model = nn.DataParallel(model)
+            model = model.to(DEVICE)
+            print(f"Using device: {DEVICE}")
 
-        # Print memory usage after model initialization
-        if torch.cuda.is_available():
-            print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
-        
-        # Define loss function and optimizer
-        criterion = scaleinvariant_RMSE()
-        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-        
-        
-        # Train the model
-        print("Starting training...")
-        model = train_model(model, train_loader, val_loader, criterion, optimizer, NUM_EPOCHS, DEVICE, results_dir)
-                
-        # Evaluate the model on validation set
-        print("Evaluating model on validation set...")
-        metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
-        
-        # Print metrics
-        print("\nValidation Metrics:")
-        for name, value in metrics.items():
-            print(f"{name}: {value:.4f}")
-        
-        # Save metrics to file
-        with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+            # Print memory usage after model initialization
+            if torch.cuda.is_available():
+                print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+            
+            # Define loss function and optimizer
+            criterion = scaleinvariant_RMSE()
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+            
+            
+            # Train the model
+            print("Starting training...")
+            model = train_model(model, train_loader, val_loader, criterion, optimizer, NUM_EPOCHS, DEVICE, results_dir)
+                    
+            # Evaluate the model on validation set
+            print("Evaluating model on validation set...")
+            metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
+            
+            # Print metrics
+            print("\nValidation Metrics:")
             for name, value in metrics.items():
-                f.write(f"{name}: {value:.4f}\n")
-        
-        # Generate predictions for the test set
-        print("Generating predictions for test set...")
-        generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
-        
-        print(f"Results saved to {results_dir}")
-        print(f"All test depth map predictions saved to {predictions_dir}")
+                print(f"{name}: {value:.4f}")
+            
+            # Save metrics to file
+            with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+                for name, value in metrics.items():
+                    f.write(f"{name}: {value:.4f}\n")
+            
+            # Generate predictions for the test set
+            print("Generating predictions for test set...")
+            generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
+            
+            print(f"Results saved to {results_dir}")
+            print(f"All test depth map predictions saved to {predictions_dir}")
     
-    else:
-        # === Continue training from checkpoint ===
-        model = AdvancedUNEt()
-        model = nn.DataParallel(model)
-        model = model.to(DEVICE)
-        print(f"Using device: {DEVICE}")
+        case "Continue":
+            # === Continue training from checkpoint ===
+            model = AdvancedUNEt()
+            model = nn.DataParallel(model)
+            model = model.to(DEVICE)
+            print(f"Using device: {DEVICE}")
 
-        if torch.cuda.is_available():
-            print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+            if torch.cuda.is_available():
+                print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
 
-        criterion = scaleinvariant_RMSE()
-        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+            base_criterion = scaleinvariant_RMSE()  # This stays your original loss
+            criterion = TotalLoss(base_loss=base_criterion,  # This is the new combined loss
+                                num_mc_samples=5,
+                                lambda1=0.1,  # Consistency loss weight
+                                lambda2=1.0) 
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
-        # Load checkpoint
-        model.load_state_dict(torch.load('./output_attention_1/results/best_model.pth', map_location=DEVICE))
-        print("Loaded model weights from best_model.pth")
+            # Load checkpoint
+            model.load_state_dict(torch.load('./outputs_pretraining_1_SIRMSE/results/best_model.pth', map_location=DEVICE))
+            print("Loaded model weights from best_model.pth")
 
-        print("Continuing training...")
-        model = train_model(
-            model,
-            train_loader,
-            val_loader,
-            criterion,
-            optimizer,
-            NUM_EPOCHS,
-            DEVICE,
-            results_dir
-        )
+            print("Continuing training...")
+            model = train_uncertainty_model(
+                model,
+                train_loader,
+                val_loader,
+                criterion,
+                optimizer,
+                NUM_EPOCHS,
+                DEVICE,
+                results_dir
+            )
 
-        print("Evaluating model on validation set...")
-        metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
+            print("Evaluating model on validation set...")
+            metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
 
-        print("\nValidation Metrics:")
-        for name, value in metrics.items():
-            print(f"{name}: {value:.4f}")
-
-        with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+            print("\nValidation Metrics:")
             for name, value in metrics.items():
-                f.write(f"{name}: {value:.4f}\n")
+                print(f"{name}: {value:.4f}")
 
-        print("Generating predictions for test set...")
-        generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
+            with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+                for name, value in metrics.items():
+                    f.write(f"{name}: {value:.4f}\n")
 
-        print(f"Results saved to {results_dir}")
-        print(f"All test depth map predictions saved to {predictions_dir}")
+            print("Generating predictions for test set...")
+            generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
+
+            print(f"Results saved to {results_dir}")
+            print(f"All test depth map predictions saved to {predictions_dir}")
+        
+        case "Adding Dropout":
+            # === Continue training from checkpoint ===
+            model = AdvancedUNEt(dropout_rate=0.2)
+            model = nn.DataParallel(model)
+            model = model.to(DEVICE)
+            print(f"Using device: {DEVICE}")
+
+            if torch.cuda.is_available():
+                print(f"Memory allocated after model init: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+
+            criterion = scaleinvariant_RMSE()  # This stays your original loss
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+
+            # Load checkpoint
+            model.load_state_dict(torch.load('./outputs_pretraining_1_SIRMSE/best_model.pth', map_location=DEVICE))
+            print("Loaded model weights from best_model.pth")
+
+            print("Continuing training...")
+            model = train_model(
+                model,
+                train_loader,
+                val_loader,
+                criterion,
+                optimizer,
+                NUM_EPOCHS_DROPOUT,
+                DEVICE,
+                results_dir
+            )
+
+            print("Evaluating model on validation set...")
+            metrics = evaluate_model(model, val_loader, DEVICE, results_dir)
+
+            print("\nValidation Metrics:")
+            for name, value in metrics.items():
+                print(f"{name}: {value:.4f}")
+
+            with open(os.path.join(results_dir, 'validation_metrics.txt'), 'w') as f:
+                for name, value in metrics.items():
+                    f.write(f"{name}: {value:.4f}\n")
+
+            print("Generating predictions for test set...")
+            generate_test_predictions(model, test_loader, DEVICE, predictions_dir)
+
+            print(f"Results saved to {results_dir}")
+            print(f"All test depth map predictions saved to {predictions_dir}")
 
 
 if __name__ == '__main__':
