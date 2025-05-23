@@ -33,12 +33,13 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     GradLoss = ScaleInvariantGradientLoss()
     PhotoLoss = ScaleInvariantPhotometricLoss()
 
+
     for epoch in range(start_epoch, num_epochs + start_epoch):
         epoch_dir = os.path.join(results_dir, f'epoch_{epoch+1}')
 
         ensure_dir(epoch_dir)
 
-        print(f"Epoch {epoch+1}/{num_epochs}")
+        print(f"Epoch {epoch+1}/{num_epochs + start_epoch}")
         
         # Training phase
         model.train()
