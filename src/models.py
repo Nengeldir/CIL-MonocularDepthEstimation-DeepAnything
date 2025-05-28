@@ -137,34 +137,6 @@ class AdvancedUNet(nn.Module):
         x = torch.sigmoid(x)*10
         return x
 
-class DownVar(nn.Module):
-    def __init__(self, in_channels, out_channels, resizing):
-        super(DownVar, self).__init__()
-        self.MP = nn.MaxPool2d(resizing)
-        self.conv = ConvBlock(in_channels, out_channels)
-
-    def forward(self, x):
-        return self.conv(self.MP(x))
-
-
-class UpVar(nn.Module):
-    def __init__(self, in_channels, out_channels, resizing):
-        super(UpVar, self).__init__()
-        self.up = nn.Upsample(scale_factor=resizing, mode='bilinear', align_corners=True)
-        self.conv = ConvBlock(in_channels, out_channels)
-
-    def forward(self, x1, x2):
-        x1 = self.up(x1)
-        # input is CHW
-        diffY = x2.size()[2] - x1.size()[2]
-        diffX = x2.size()[3] - x1.size()[3]
-
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
-
-        x = torch.cat([x2, x1], dim=1)
-        return self.conv(x)
-
 class AdvancedUNetPooling(nn.Module):
     def __init__(self):
         super(AdvancedUNetPooling, self).__init__()
