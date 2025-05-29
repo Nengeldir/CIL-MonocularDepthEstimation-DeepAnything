@@ -10,23 +10,26 @@ We tackle the prominent problem of Depth Estimation in this project and have var
 
 
 ## Finetuning
+### DepthAnythingV2
+In the branch ```LucaTestingBranch```, one can find the code to fine-tune the DepthAnythingV2 model. The pretrained weights for (depending on the encoder size) can be downloaded in the original repository: (https://github.com/DepthAnything/Depth-Anything-V2). To reproduce the results, one must clone the DepthAnythingV2 repository and add it to the system path. The notebook FineTuneDepthAnything.ipynb contains the pipeline to fine-tune the model.
 
-
+### IndoorDepth
+Due to this model's size, we could not run it locally. So, we used a Google Colab subscription to let it use dedicated GPUs for this task. I included a zip file with the code's changes in the branch ```FineTuneIndoorDepth```.
 
 ## Depth Enhancement
-The Depth Enhancement process consist of two steps:
+The Depth Enhancement process consists of two steps:
 - Uncertainty Map
 - Low Rank Approximation
 
-For the Uncertainty Model we train the the respective double decoder model with the `double_decoder_setup.py` file.
+For the Uncertainty Model, we train the respective double decoder model with the `double_decoder_setup.py` file.
 
-Then we use outputs of this model in the file `lowrank.py` file and post-process the outputs according to the steps in the paper.
+Then, we use the outputs of this model in the file `lowrank.py` and post-process them according to the steps in the paper.
 
 ## Additional Files
-Helper files such as the model architecutre, loss functions and train process specifications can be found in the `utils/` folder.
+The ' utils/' folder contains helper files such as the model architecture, loss functions, and train process specifications.
 
 ## Reproducability of Results
-The results of the paper should be easily reproducable with the given code and the use of a random seed.
+The paper's results should be easily reproducible using the given code and a random seed.
 
 ## Authors
 Luca Conconi, Marino Eisenegger, Timon Fopp, Nick Hofstetter
