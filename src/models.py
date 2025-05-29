@@ -169,3 +169,53 @@ class AdvancedUNetPooling(nn.Module):
         x = self.final(x)
         x = torch.sigmoid(x) * 10
         return x
+
+
+class UncertaintyUNEt(nn.Module):
+    def __init__(self, dropout_rate=0.2):
+        super(UncertaintyUNEt, self).__init__()
+
+        self.inc = (ConvBlock(3, 64, dropout_rate))
+        self.down1 = (Down(64, 128, dropout_rate))
+        self.down2 = (Down(128, 256, dropout_rate))
+        self.down3 = (Down(256, 512, dropout_rate))
+
+        factor = 2
+
+        self.down4 = (Down(512, 1024 // factor, dropout_rate))
+
+        self.up1 = (Up(1024, 512 // factor, dropout_rate))
+        self.up2 = (Up(512, 256 // factor, dropout_rate))
+        self.up3 = (Up(256, 128 // factor, dropout_rate))
+        self.up4 = (Up(128, 64, dropout_rate))
+
+        self.final = nn.Conv2d(64, 1, kernel_size=1)
+
+        self.up_uncertainty1 = (Up(1024, 512 // factor, dropout_rate))
+        self.up_uncertainty2 = (Up(512, 256 // factor, dropout_rate))
+        self.up_uncertainty3 = (Up(256, 128 // factor, dropout_rate))
+        self.up_uncertainty4 = (Up(128, 64, dropout_rate))
+
+        self.final_uncertainty = nn.Conv2d(64, 1, kernel_size=1)
+    
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+
+        x1_up = self.up1(x5, x4)
+        x2_up = self.up2(x1_up, x3)
+        x3_up = self.up3(x2_up, x2)
+        x4_up = self.up4(x3_up, x1)
+        xfinal_up = self.final(x4_up)
+        xfinal_up = torch.sigmoid(xfinal_up)*10
+
+        x1_uncertainty = self.up_uncertainty1(x5.detach(),x4.detach())
+        x2_uncertainty = self.up_uncertainty2(x1_uncertainty, x3.detach())
+        x3_uncertainty = self.up_uncertainty3(x2_uncertainty, x2.detach())
+        x4_uncertainty = self.up_uncertainty4(x3_uncertainty, x1.detach())
+        xfinal_uncertainty = self.final_uncertainty(x4_uncertainty)
+        xfinal_uncertainty = torch.sigmoid(xfinal_uncertainty)
+        return xfinal_up, xfinal_uncertainty
