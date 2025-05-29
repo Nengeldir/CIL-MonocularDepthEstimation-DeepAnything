@@ -28,6 +28,9 @@ Helper files such as the model architecutre, loss functions and train process sp
 ## Reproducability of Results
 The results of the paper should be easily reproducable with the given code and the use of a random seed.
 
+## Authors
+Luca Conconi, Marino Eisenegger, Timon Fopp, Nick Hofstetter
+
 
 TODO: Nick :) 
 
