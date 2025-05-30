@@ -6,7 +6,7 @@ We tackle the prominent problem of Depth Estimation in this project and have var
 - [Depth Enhancement](#depth-enhancement)
 
 ## UNet
-The main function of the file `unet_experiments.py` can be used to reproduce the results for the UNet models as shown in the paper.
+The main function of the file `unet_experiments.py` can be used to reproduce the results for the UNet models as shown in the paper. It iteratively trains SimpleUNet, AdvancedUNet and AdvancedUNetPooling for 10 epochs respectively.
 
 ## Finetuning
 ### DepthAnythingV2
