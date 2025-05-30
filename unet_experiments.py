@@ -6,8 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from pathlib import Path
 
-from src.utils import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device
-from src.models import SimpleUNet, AdvancedUNEt, AdvancedUNEtDifferentResizing3
+from src.utils_unet import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device
+from src.models import SimpleUNet, AdvancedUNEt, AdvancedUNetPooling
 from src.transforms import target_transform
 from src.datasets import DepthDataset
 from src.loss import scaleinvariant_RMSE
@@ -33,7 +33,7 @@ PIN_MEMORY = True
 MODEL_CLASS_LIST = [
     (SimpleUNet, scaleinvariant_RMSE(), 0),
     (AdvancedUNEt, scaleinvariant_RMSE(), 0),
-    (AdvancedUNEtDifferentResizing3, scaleinvariant_RMSE(), 0)
+    (AdvancedUNetPooling, scaleinvariant_RMSE(), 0)
     ]
 def main():
 
