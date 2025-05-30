@@ -7,7 +7,7 @@ from torchvision import transforms
 from pathlib import Path
 
 from src.utils_unet import ensure_dir, train_model, evaluate_model, generate_test_predictions, get_best_device
-from src.models import SimpleUNet, AdvancedUNEt, AdvancedUNetPooling
+from src.models import SimpleUNet, AdvancedUNet, AdvancedUNetPooling
 from src.transforms import target_transform
 from src.datasets import DepthDataset
 from src.loss import scaleinvariant_RMSE
@@ -32,7 +32,7 @@ PIN_MEMORY = True
 # Define the model, loss and start epoch. If we already trained up to epoch 3, we would input 4 for start epoch to continue improving the model
 MODEL_CLASS_LIST = [
     (SimpleUNet, scaleinvariant_RMSE(), 0),
-    (AdvancedUNEt, scaleinvariant_RMSE(), 0),
+    (AdvancedUNet, scaleinvariant_RMSE(), 0),
     (AdvancedUNetPooling, scaleinvariant_RMSE(), 0)
     ]
 def main():
