@@ -1,8 +1,8 @@
 # DeepAnthing - MonocularDepthEstimation CIL Project
 
 We tackle the prominent problem of Depth Estimation in this project and have various solution attempts:
-- [UNet](#features)
-- [Finetuning](#installation)
+- [UNet](#unet)
+- [Finetuning](#finetuning)
 - [Depth Enhancement](#depth-enhancement)
 
 ## UNet
