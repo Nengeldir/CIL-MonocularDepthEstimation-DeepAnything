@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 import math
 
 from torch.utils.tensorboard import SummaryWriter
-from src.loss import scaleinvariant_RMSE, ScaleInvariantGradientLoss, ScaleInvariantPhotometricLoss
+from src.loss import scaleinvariant_RMSE
 
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir, train_pictures_loader, start_epoch, val_criterion):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, results_dir, start_epoch, val_criterion):
     # TensorBoard writer
     writer = SummaryWriter(log_dir=os.path.join(results_dir, "tensorboard_logs"))
 
@@ -30,8 +30,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
     # Some fixed losses we track for each model, regardless of the train loss
     SIMLoss = scaleinvariant_RMSE()
-    GradLoss = ScaleInvariantGradientLoss()
-    PhotoLoss = ScaleInvariantPhotometricLoss()
 
 
     for epoch in range(start_epoch, num_epochs + start_epoch):
@@ -61,8 +59,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
             # Compute the losses for tensorboard
             si = SIMLoss(outputs, targets)
-            gl = GradLoss(outputs, targets)
-            pl = PhotoLoss(outputs, targets)
 
             # Backward pass and optimize
             loss.backward()
@@ -76,8 +72,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             # Log to TensorBoard
             writer.add_scalar("Loss/Train", loss.item(), global_step)
             writer.add_scalar("Loss/ScaleInvariantLoss", si.item(), global_step)
-            writer.add_scalar("Loss/GradientLoss", gl.item(), global_step)
-            writer.add_scalar("Loss/PhotometricLoss", pl.item(), global_step)
 
             global_step += 1
             batch += 1
