@@ -21,8 +21,8 @@ from src.loss import SIRMSECorrelation
 data_dir = '/cluster/courses/cil/monocular_depth/data'
 train_dir = os.path.join(data_dir, 'train')
 test_dir = os.path.join(data_dir, 'test')
-# train_list_file = os.path.join(data_dir, 'train_list.txt')
-train_list_file = ('./train_list_cluster.txt')
+train_list_file = os.path.join(data_dir, 'train_list.txt')
+# train_list_file = ('./train_list_cluster.txt')
 test_list_file = os.path.join(data_dir, 'test_list.txt')
 output_dir = './outputs_uncertainty'
 results_dir = os.path.join(output_dir, 'results')
