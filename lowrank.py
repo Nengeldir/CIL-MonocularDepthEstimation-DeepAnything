@@ -444,12 +444,17 @@ if __name__ == "__main__":
     plt.savefig('./updating_images/average_losses_by_rank.png')
     plt.close()
     before_average = np.mean(sirmse_before)
+    before_std = np.std(sirmse_before)
     avg_sirmse_after_by_rank = {r: np.mean(sirmse_after[r]) for r in ranks}
+    std_sirmse_after_by_rank = {r: np.std(sirmse_after[r]) for r in ranks}
     total_end = time.perf_counter()
     with open("./comparison_lowrank_approximation.txt", 'w') as f:
         f.write(f"Average Before: {before_average:.6f}\n")
+        f.write(f"Std Before: {before_std:.6f}\n")
         for r, avg_after in avg_sirmse_after_by_rank.items():
             f.write(f"Average After (Rank {r}): {avg_after:.6f}\n")
+        for r, std_after in std_sirmse_after_by_rank.items():
+            f.write(f"Std After (Rank {r}): {std_after:.6f}\n")
         for r, avg_loss in avg_losses_by_rank.items():
             f.write(f"Average Frobenius Loss (Rank {r}): {avg_loss:.6f}\n")
         f.write(f"Updating time total: {total_end - total_start:.4f}")
